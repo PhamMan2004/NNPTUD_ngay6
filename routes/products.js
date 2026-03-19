@@ -71,26 +71,72 @@ router.get('/:id', async function (req, res, next) {
 // });
 //CREATE UPDATE DELETE
 router.post('/', async function (req, res) {
-    let newProduct = new productModel({
-        title: req.body.title,
-        slug: slugify(req.body.title, {
-            replacement: '-',
-            remove: undefined,
-            lower: true,
-            strict: true
-        }),
-        price: req.body.price,
-        description: req.body.description,
-        category: req.body.category,
-        images: req.body.images
-    })
-    await newProduct.save()
-    res.send(newProduct)
+    try {
+        let body = req.body || {};
+
+        // Support accidentally sent payloads where raw JSON becomes a single key
+        if ((!body.title && !body.name) && body && typeof body === 'object') {
+            let keys = Object.keys(body);
+            if (keys.length === 1 && keys[0].trim().startsWith('{')) {
+                try {
+                    let parsed = JSON.parse(keys[0]);
+                    if (parsed && typeof parsed === 'object') {
+                        body = parsed;
+                    }
+                } catch (e) {
+                    // keep original body if parse fails
+                }
+            }
+        }
+
+        let rawTitle = body.title ?? body.name;
+        let title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+        if (!title) {
+            return res.status(400).send({
+                message: 'title is required and must be a non-empty string',
+                hint: 'Send JSON body with Content-Type: application/json and field "title" (or "name").'
+            });
+        }
+
+        let newProduct = new productModel({
+            title: title,
+            slug: slugify(title, {
+                replacement: '-',
+                remove: undefined,
+                lower: true,
+                strict: true
+            }),
+            price: body.price,
+            description: body.description,
+            category: body.category,
+            images: body.images
+        })
+        await newProduct.save()
+        res.send(newProduct)
+    } catch (error) {
+        res.status(400).send({
+            message: error.message
+        })
+    }
 })
 router.put('/:id', async function (req, res) {
 
     try {
         let id = req.params.id;
+        if (Object.prototype.hasOwnProperty.call(req.body, 'title')) {
+            if (typeof req.body.title !== 'string' || !req.body.title.trim()) {
+                return res.status(400).send({
+                    message: 'title must be a non-empty string'
+                });
+            }
+            req.body.title = req.body.title.trim();
+            req.body.slug = slugify(req.body.title, {
+                replacement: '-',
+                remove: undefined,
+                lower: true,
+                strict: true
+            });
+        }
         //c1
         // let result = await productModel.findOne({
         //   isDeleted: false,

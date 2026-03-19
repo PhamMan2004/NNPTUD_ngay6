@@ -1,4 +1,5 @@
 let mongoose = require('mongoose');
+let inventoryModel = require('./inventories');
 
 let productSchema = mongoose.Schema({
     title: {
@@ -35,4 +36,27 @@ let productSchema = mongoose.Schema({
         default: false
     }
 })
+
+productSchema.pre('save', function () {
+    this.$locals = this.$locals || {};
+    this.$locals.wasNew = this.isNew;
+});
+
+productSchema.post('save', async function (doc) {
+    if (doc.$locals && doc.$locals.wasNew) {
+        await inventoryModel.findOneAndUpdate(
+            { product: doc._id },
+            {
+                $setOnInsert: {
+                    product: doc._id,
+                    stock: 0,
+                    reserved: 0,
+                    soldCount: 0
+                }
+            },
+            { upsert: true, new: true }
+        );
+    }
+});
+
 module.exports = new mongoose.model('product', productSchema)
